@@ -125,10 +125,5 @@
             playerState.ProtectionState = ProtectionState.None;
             Server.NextFrame(() => HandleTransparentModel(player, true));
         }
-
-        public override void Unload(bool hotReload)
-        {
-            VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
-        }
     }
 }

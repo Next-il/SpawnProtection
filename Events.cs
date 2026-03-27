@@ -17,7 +17,7 @@ namespace SpawnProtection
 			RegisterEventHandler<EventPlayerActivate>(OnPlayerActivate);
 			RegisterEventHandler<EventPlayerDisconnect>(OnPlayerDisconnect, HookMode.Pre);
 
-			VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
+			RegisterListener<Listeners.OnPlayerTakeDamagePre>(OnPlayerTakeDamagePre);
 
 			if (Config.CenterHtmlMessage)
 			{
@@ -90,6 +90,19 @@ namespace SpawnProtection
 				return HookResult.Continue;
 
 			hook.SetReturn(false);
+			return HookResult.Handled;
+		}
+
+		private HookResult OnPlayerTakeDamagePre(CCSPlayerPawn p, CTakeDamageInfo info)
+		{
+			if (p == null || !p.IsValid)
+				return HookResult.Continue;
+
+			var player = p?.Controller.Value?.As<CCSPlayerController>();
+
+			if (!player.IzGud() || !player.IsProtected())
+				return HookResult.Continue;
+
 			return HookResult.Handled;
 		}
 
