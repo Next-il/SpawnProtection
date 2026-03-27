@@ -19,6 +19,7 @@ namespace SpawnProtection
 
 			RegisterListener<Listeners.OnPlayerTakeDamagePre>(OnPlayerTakeDamagePre);
 
+
 			if (Config.CenterHtmlMessage)
 			{
 				RegisterListener<Listeners.OnTick>(() =>
