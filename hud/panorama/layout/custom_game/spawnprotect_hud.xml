@@ -1,0 +1,58 @@
+<root>
+	<styles>
+		<include src="s2r://panorama/styles/custom_game/hud_shared.vcss_c" />
+		<include src="s2r://panorama/styles/custom_game/spawnprotect_hud.vcss_c" />
+	</styles>
+
+	<!--
+		Spawn protection HUD - one private pill for the protected player, 60px under the crosshair (top 598),
+		above the AFK card's lane (top 640). 196x42.
+
+		  st-live    "SPAWN PROTECTED / You can't be damaged", the seconds left and a 2px bar. The bar sits
+		             full through freeze time and drains over the protection time once the plugin's timer
+		             starts (was "YOU ARE SPAWN PROTECTED / N SECONDS LEFT" and a 12-segment text bar in
+		             center HTML, rewritten every tick)
+		  st-ended   "PROTECTION ENDED / You can be damaged now" (or "You fired your weapon", "You moved"),
+		             red, 1.5s, then the pill leaves
+
+		NOT INTERACTIVE. hittest false everywhere; the plugin opens it with CaptureInput = false.
+
+		CONTRACT (SpawnHud.cs must match)
+		  RootPanelId  = "SpawnProtRoot"   RevealClass = "show"   RowCount = 0
+		  CaptureInput = false             HideHud = None         SharedText = false
+
+		The root is full-screen and carries nothing visible itself; it is opened once per player and stays
+		open. The pill has its own "show", and "hidden" (collapse) while it is not in use.
+
+		DIALOG VARIABLES
+		  sp_label sp_sub sp_n
+
+		CLASSES THE SERVER TOGGLES
+		  sp_pill   show hidden | st-live st-ended
+		  sp_bar    at-0..at-20     where the bar starts, in 5% steps (at-20 = full)
+		            dur-1..dur-60   how long it drains for, in seconds
+		            run             drain to 0, one linear clip transition
+	-->
+	<Panel class="hud-screen" hittest="false">
+		<Panel id="SpawnProtRoot" class="sp-root" hittest="false">
+
+			<Panel id="sp_pill" class="hn st-live hidden" hittest="false">
+				<Panel class="hn-row" hittest="false">
+					<Panel class="hn-icon" hittest="false" />
+					<Panel class="hn-main" hittest="false">
+						<Label class="hn-label" hittest="false" text="{s:sp_label}" />
+						<Label class="hn-sub" hittest="false" text="{s:sp_sub}" />
+					</Panel>
+					<Panel class="hn-num" hittest="false">
+						<Label class="hn-n" hittest="false" text="{s:sp_n}" />
+						<Label class="hn-s" hittest="false" text="s" />
+					</Panel>
+				</Panel>
+				<Panel class="hn-track" hittest="false">
+					<Panel id="sp_bar" class="hn-bar at-20" hittest="false" />
+				</Panel>
+			</Panel>
+
+		</Panel>
+	</Panel>
+</root>

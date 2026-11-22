@@ -35,6 +35,7 @@ namespace SpawnProtection
 			{
 				protectedPlayers.Clear();
 				gameRules = null;
+				HudMapStart();
 
 				AddTimer(1.0f, () =>
 				{
@@ -47,6 +48,7 @@ namespace SpawnProtection
 		public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
 		{
 			protectedPlayers.Clear();
+			HudRoundEnd();
 			foreach (var state in _playerStates.Values)
 			{
 				state.ShowCenterMessage = false;
@@ -117,7 +119,7 @@ namespace SpawnProtection
 			if (!player.IzGud() || !player.IsProtected())
 				return HookResult.Continue;
 
-			StopSpawnProtection(player, _playerStates[player.Index]);
+			StopSpawnProtection(player, _playerStates[player.Index], end: ProtectionEnd.Fired);
 
 			return HookResult.Continue;
 		}
@@ -135,6 +137,10 @@ namespace SpawnProtection
 		public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo _)
 		{
 			CCSPlayerController? player = @event.Userid;
+
+			// Before the pawn check: a leaving player often has no pawn, and the slot's pill must go either way
+			if (player is { IsValid: true })
+				HudDisconnect(player);
 
 			if (!player.IzGud())
 				return HookResult.Continue;

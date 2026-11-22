@@ -1,0 +1,247 @@
+/*
+    spawnprotect_hud - the spawn protection pill. Include hud_shared.vcss_c first.
+
+    Ported 1:1 from the approved preview (previews/more, tab "Spawn protection": .hn, .hn-*, st-ended).
+    Sizes are 1080p pixels, the same numbers as the preview: 196x42, top 598 (60px under the crosshair),
+    above the AFK card's lane at 640.
+
+    One pill, private to the protected player. It slides up into place with a fade and a blur, and
+    leaves the same way when "show" comes off. Green while protected, red for the short "Protection
+    ended" line.
+
+    THE BAR is one linear clip transition, not a stepped ladder, like the AFK card's. It sits full
+    (at-20, no duration) through freeze time, because the plugin's 10 seconds only start after it.
+    When the plugin's timer starts, the server adds dur-N and "run" together and the client drains it
+    to 0 on its own - no per-tick writes. A bar picked up halfway (after a respawn redraw) snaps to
+    at-N first. Clearing dur-N before "run" makes the reset snap instead of running backwards. clip
+    survives the seconds label being rewritten every second; width would not (runtime-behaviour.md).
+
+    UNVERIFIED IN GAME, with a harmless failure: blur in transition-property - if blur does not
+    animate, the pill is simply sharp at once. The icons are CS2's own (icons/ui/armor and warning),
+    tinted with wash-color. Nothing new ships in the addon but this file and the layout.
+*/
+
+/* ------------------------------------------------------------------ root */
+
+/* Opened once per player and left open; the pill carries its own "show". */
+.sp-root {
+    width: 100%;
+    height: 100%;
+    visibility: collapse;
+}
+.sp-root.show { visibility: visible; }
+
+/* ------------------------------------------------------------------ the pill */
+
+.hn {
+    horizontal-align: center;
+    vertical-align: top;
+    margin-top: 598px;
+    width: 196px;
+    border-top: 2px solid #80eb34;
+    world-blur: gaussian(8.0);
+    background-color: gradient(linear, 0% 0%, 0% 100%, from(#12171ee2), to(#0b0f14ec));
+
+    opacity: 0;
+    blur: gaussian(7.0);
+    transform: translateY(16px);
+    transition-property: opacity, transform, blur;
+    transition-duration: 0.3s, 0.34s, 0.3s;
+    transition-timing-function: ease-out, cubic-bezier( 0.2, 0.8, 0.25, 1.0 ), ease-out;
+}
+/* Entering is quicker than leaving: the transition on the state being entered is the one that plays. */
+.hn.show {
+    opacity: 1;
+    blur: gaussian(0.0);
+    transform: translateY(0px);
+    transition-duration: 0.18s, 0.22s, 0.18s;
+}
+
+/* The row holds the padding, so the track below can run the pill's full width at its bottom edge.
+   2px border + 6 + 12 + 1 + 13 + 8 = 42px tall. */
+.hn-row {
+    width: 100%;
+    flow-children: right;
+    padding: 6px 12px 8px 9px;
+}
+
+.hn-icon {
+    width: 15px;
+    height: 15px;
+    margin-right: 8px;
+    vertical-align: center;
+    background-image: url("s2r://panorama/images/icons/ui/armor.vsvg");
+    background-size: 100% 100%;
+    /* The icons are 32x32 SVGs; rasterize at 2x the drawn size so 1440p and 4K stay sharp. */
+    background-texture-size: 30px 30px;
+    background-repeat: no-repeat;
+    wash-color: #80eb34;
+}
+
+.hn-main {
+    width: fill-parent-flow(1.0);
+    flow-children: down;
+    vertical-align: center;
+}
+.hn-label {
+    font-family: Stratum2 Mono;
+    font-size: 9px;
+    font-weight: bold;
+    letter-spacing: 1.6px;
+    line-height: 12px;
+    color: #80eb34;
+    text-transform: uppercase;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.hn-sub {
+    font-family: Stratum2 Regular;
+    font-size: 10.5px;
+    line-height: 13px;
+    color: #9aa2ac;
+    margin-top: 1px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The seconds left: a number and a small "s" on its baseline. */
+.hn-num {
+    flow-children: right;
+    vertical-align: center;
+    margin-left: 8px;
+}
+.hn-n {
+    font-family: Stratum2 Medium Condensed;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 18px;
+    min-width: 22px;
+    text-align: right;
+    color: #e8ebee;
+}
+/* "Stratum2 Medium Condensed" at normal weight is the preview's 600. */
+.hn-s {
+    font-family: Stratum2 Medium Condensed;
+    font-size: 11px;
+    color: #6c747d;
+    vertical-align: bottom;
+    margin-left: 1px;
+}
+
+/* ------------------------------------------------------------------ the bar */
+
+.hn-track {
+    width: 100%;
+    height: 2px;
+    vertical-align: bottom;
+}
+/* Zero by default, so taking "run" and the dur-N class off snaps it back instead of animating. */
+.hn-bar {
+    width: 100%;
+    height: 100%;
+    background-color: #80eb34;
+    clip: rect( 0%, 100%, 100%, 0% );
+    transition-property: clip;
+    transition-duration: 0.0s;
+    transition-timing-function: linear;
+}
+
+/* Where it starts. */
+.hn-bar.at-0 { clip: rect( 0%, 0%, 100%, 0% ); }
+.hn-bar.at-1 { clip: rect( 0%, 5%, 100%, 0% ); }
+.hn-bar.at-2 { clip: rect( 0%, 10%, 100%, 0% ); }
+.hn-bar.at-3 { clip: rect( 0%, 15%, 100%, 0% ); }
+.hn-bar.at-4 { clip: rect( 0%, 20%, 100%, 0% ); }
+.hn-bar.at-5 { clip: rect( 0%, 25%, 100%, 0% ); }
+.hn-bar.at-6 { clip: rect( 0%, 30%, 100%, 0% ); }
+.hn-bar.at-7 { clip: rect( 0%, 35%, 100%, 0% ); }
+.hn-bar.at-8 { clip: rect( 0%, 40%, 100%, 0% ); }
+.hn-bar.at-9 { clip: rect( 0%, 45%, 100%, 0% ); }
+.hn-bar.at-10 { clip: rect( 0%, 50%, 100%, 0% ); }
+.hn-bar.at-11 { clip: rect( 0%, 55%, 100%, 0% ); }
+.hn-bar.at-12 { clip: rect( 0%, 60%, 100%, 0% ); }
+.hn-bar.at-13 { clip: rect( 0%, 65%, 100%, 0% ); }
+.hn-bar.at-14 { clip: rect( 0%, 70%, 100%, 0% ); }
+.hn-bar.at-15 { clip: rect( 0%, 75%, 100%, 0% ); }
+.hn-bar.at-16 { clip: rect( 0%, 80%, 100%, 0% ); }
+.hn-bar.at-17 { clip: rect( 0%, 85%, 100%, 0% ); }
+.hn-bar.at-18 { clip: rect( 0%, 90%, 100%, 0% ); }
+.hn-bar.at-19 { clip: rect( 0%, 95%, 100%, 0% ); }
+.hn-bar.at-20 { clip: rect( 0%, 100%, 100%, 0% ); }
+
+/* How long it drains for: every second to 60. The plugin snaps to the nearest. */
+.hn-bar.dur-1 { transition-duration: 1.0s; }
+.hn-bar.dur-2 { transition-duration: 2.0s; }
+.hn-bar.dur-3 { transition-duration: 3.0s; }
+.hn-bar.dur-4 { transition-duration: 4.0s; }
+.hn-bar.dur-5 { transition-duration: 5.0s; }
+.hn-bar.dur-6 { transition-duration: 6.0s; }
+.hn-bar.dur-7 { transition-duration: 7.0s; }
+.hn-bar.dur-8 { transition-duration: 8.0s; }
+.hn-bar.dur-9 { transition-duration: 9.0s; }
+.hn-bar.dur-10 { transition-duration: 10.0s; }
+.hn-bar.dur-11 { transition-duration: 11.0s; }
+.hn-bar.dur-12 { transition-duration: 12.0s; }
+.hn-bar.dur-13 { transition-duration: 13.0s; }
+.hn-bar.dur-14 { transition-duration: 14.0s; }
+.hn-bar.dur-15 { transition-duration: 15.0s; }
+.hn-bar.dur-16 { transition-duration: 16.0s; }
+.hn-bar.dur-17 { transition-duration: 17.0s; }
+.hn-bar.dur-18 { transition-duration: 18.0s; }
+.hn-bar.dur-19 { transition-duration: 19.0s; }
+.hn-bar.dur-20 { transition-duration: 20.0s; }
+.hn-bar.dur-21 { transition-duration: 21.0s; }
+.hn-bar.dur-22 { transition-duration: 22.0s; }
+.hn-bar.dur-23 { transition-duration: 23.0s; }
+.hn-bar.dur-24 { transition-duration: 24.0s; }
+.hn-bar.dur-25 { transition-duration: 25.0s; }
+.hn-bar.dur-26 { transition-duration: 26.0s; }
+.hn-bar.dur-27 { transition-duration: 27.0s; }
+.hn-bar.dur-28 { transition-duration: 28.0s; }
+.hn-bar.dur-29 { transition-duration: 29.0s; }
+.hn-bar.dur-30 { transition-duration: 30.0s; }
+.hn-bar.dur-31 { transition-duration: 31.0s; }
+.hn-bar.dur-32 { transition-duration: 32.0s; }
+.hn-bar.dur-33 { transition-duration: 33.0s; }
+.hn-bar.dur-34 { transition-duration: 34.0s; }
+.hn-bar.dur-35 { transition-duration: 35.0s; }
+.hn-bar.dur-36 { transition-duration: 36.0s; }
+.hn-bar.dur-37 { transition-duration: 37.0s; }
+.hn-bar.dur-38 { transition-duration: 38.0s; }
+.hn-bar.dur-39 { transition-duration: 39.0s; }
+.hn-bar.dur-40 { transition-duration: 40.0s; }
+.hn-bar.dur-41 { transition-duration: 41.0s; }
+.hn-bar.dur-42 { transition-duration: 42.0s; }
+.hn-bar.dur-43 { transition-duration: 43.0s; }
+.hn-bar.dur-44 { transition-duration: 44.0s; }
+.hn-bar.dur-45 { transition-duration: 45.0s; }
+.hn-bar.dur-46 { transition-duration: 46.0s; }
+.hn-bar.dur-47 { transition-duration: 47.0s; }
+.hn-bar.dur-48 { transition-duration: 48.0s; }
+.hn-bar.dur-49 { transition-duration: 49.0s; }
+.hn-bar.dur-50 { transition-duration: 50.0s; }
+.hn-bar.dur-51 { transition-duration: 51.0s; }
+.hn-bar.dur-52 { transition-duration: 52.0s; }
+.hn-bar.dur-53 { transition-duration: 53.0s; }
+.hn-bar.dur-54 { transition-duration: 54.0s; }
+.hn-bar.dur-55 { transition-duration: 55.0s; }
+.hn-bar.dur-56 { transition-duration: 56.0s; }
+.hn-bar.dur-57 { transition-duration: 57.0s; }
+.hn-bar.dur-58 { transition-duration: 58.0s; }
+.hn-bar.dur-59 { transition-duration: 59.0s; }
+.hn-bar.dur-60 { transition-duration: 60.0s; }
+
+/* After the at-N ladder, so it wins over any of them: same specificity, later rule. */
+.hn-bar.run { clip: rect( 0%, 0%, 100%, 0% ); }
+
+/* ------------------------------------------------------------------ states */
+
+/* Protection ended: red, a warning icon, no number and no bar. */
+.hn.st-ended { border-top-color: #e8543f; }
+.hn.st-ended .hn-icon {
+    background-image: url("s2r://panorama/images/icons/ui/warning.vsvg");
+    wash-color: #e8543f;
+}
+.hn.st-ended .hn-label { color: #e8543f; }
+.hn.st-ended .hn-num,
+.hn.st-ended .hn-track { visibility: collapse; }

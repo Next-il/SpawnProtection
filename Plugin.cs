@@ -12,7 +12,7 @@
         public override string ModuleName => "SpawnProtection";
         public override string ModuleAuthor => "itsAudio @ Kitsune-Lab.com";
         public override string ModuleDescription => "https://github.com/audiomaster99/SpawnProtection";
-        public override string ModuleVersion => "1.0.2";
+        public override string ModuleVersion => "1.1.0";
 
         internal readonly Dictionary<uint, PlayerState> _playerStates = new();
         public static HashSet<CCSPlayerController> playerCache = [];
@@ -39,6 +39,7 @@
             Instance = this;
 
             RegisterEventsListeners();
+            HudLoad();
 
             _freezeTime = ConVar.Find("mp_freezetime")!.GetPrimitiveValue<int>();
 
@@ -54,7 +55,9 @@
             if (!IsPlayerValid(player) || !player.IsProtected())
                 return;
 
-            DisplayProtectionStatus(player, _playerStates[player.Index]);
+            // The pill draws this player's protection on its own; the center text is the fallback
+            if (!HudShows(player))
+                DisplayProtectionStatus(player, _playerStates[player.Index]);
             CheckMovementViolation(player, _playerStates[player.Index]);
         }
 
@@ -94,7 +97,7 @@
         private void CheckMovementViolation(CCSPlayerController player, PlayerState playerState)
         {
             if (Config.StopProtectionOnMove && player.PlayerPawn.Value!.HasMovedSinceSpawn)
-                StopSpawnProtection(player, playerState);
+                StopSpawnProtection(player, playerState, end: ProtectionEnd.Moved);
         }
 
         public void StartSpawnProtection(CCSPlayerController player)
@@ -111,11 +114,12 @@
             state.ProtectionState = ProtectionState.Protected;
             state.ProtectionTimer = Config.SpawnProtTime;
             Server.NextFrame(() => HandleTransparentModel(player));
+            HudProtect(player, state);
 
             AddTimer(IsFreezeTime ? _freezeTime : 0f, () => CreateProtectionTimer(player, state));
         }
 
-        public void StopSpawnProtection(CCSPlayerController player, PlayerState playerState, bool isDead = false)
+        public void StopSpawnProtection(CCSPlayerController player, PlayerState playerState, bool isDead = false, ProtectionEnd end = ProtectionEnd.Quiet)
         {
             protectedPlayers.Remove(player);
 
@@ -124,6 +128,7 @@
             playerState.SpawnTimer?.Kill();
             playerState.ProtectionState = ProtectionState.None;
             Server.NextFrame(() => HandleTransparentModel(player, true));
+            HudEnd(player, isDead ? ProtectionEnd.Quiet : end);
         }
     }
 }

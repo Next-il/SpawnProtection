@@ -70,11 +70,12 @@ namespace SpawnProtection
 		private void CreateProtectionTimer(CCSPlayerController player, PlayerState state)
 		{
 			state.SpawnTimer?.Kill();
+			HudDrain(player, state);
 			state.SpawnTimer = AddTimer(0.1f, () =>
 			{
 				if (state.ProtectionTimer <= 0.1f)
 				{
-					StopSpawnProtection(player, state);
+					StopSpawnProtection(player, state, end: ProtectionEnd.Expired);
 					return;
 				}
 				state.ProtectionTimer -= 0.1f;

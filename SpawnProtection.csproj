@@ -2,22 +2,33 @@
 	<PropertyGroup Condition="'$(Configuration)'=='Release'">
 		<DebugSymbols>False</DebugSymbols>
 		<DebugType>None</DebugType>
-		<GenerateDependencyFile>false</GenerateDependencyFile>
 		<PublishDir>./bin/SpawnProtection/</PublishDir>
 	</PropertyGroup>
 	<PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
+		<!-- net10.0 and CounterStrikeSharp.API 1.0.374 are PanoramaManager's floor: the package targets net10.0 and
+		     declares that CSS version, so a lower pin fails restore with NU1605. The servers run CSS 1.0.380. -->
+		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="CounterStrikeSharp.API" Version="1.0.364">
-			<PrivateAssets>none</PrivateAssets>
-			<ExcludeAssets>runtime</ExcludeAssets>
-			<IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
+		<PackageReference Include="CounterStrikeSharp.API" Version="1.0.374" />
+
+		<!-- The spawn protection pill (SpawnHud.cs). Copied next to the plugin by CopyPanoramaManager below:
+		     each CounterStrikeSharp plugin loads from its own folder, and the deps.json (no longer turned off)
+		     is what points the loader at it. Same version as our other HUD plugins. -->
+		<PackageReference Include="PanoramaManager" Version="0.4.3" />
 	</ItemGroup>
 	<ItemGroup>
 		<None Update="lang\**\*.*" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
+
+	<!-- A class library does not copy package dlls on build, and turning CopyLocalLockFileAssemblies on would
+	     copy CounterStrikeSharp.API's whole tree. This copies PanoramaManager only. -->
+	<Target Name="CopyPanoramaManager" AfterTargets="ResolveLockFileCopyLocalFiles">
+		<ItemGroup>
+			<ReferenceCopyLocalPaths Include="@(RuntimeCopyLocalItems)"
+			                         Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' == 'PanoramaManager'" />
+		</ItemGroup>
+	</Target>
 </Project>

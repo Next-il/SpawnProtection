@@ -21,7 +21,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: 10.0.x
     - name: Restore
       run: dotnet restore
     - name: Build
@@ -37,7 +37,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: 10.0.x
     - name: Restore
       run: dotnet restore
     - name: Build
@@ -49,6 +49,16 @@ jobs:
           ${{ env.OUTPUT_PATH }}/McMaster.NETCore.Plugins.dll \
           ${{ env.OUTPUT_PATH }}/Microsoft.DotNet.PlatformAbstractions.dll \
           ${{ env.OUTPUT_PATH }}/Microsoft.Extensions.DependencyModel.dll
+    # Before the version bump is pushed: a zip without these does not load (the HUD library loads from the
+    # plugin's own folder, through the deps.json)
+    - name: Verify the plugin folder
+      run: |
+        set -e
+        test -f ${{ env.OUTPUT_PATH }}/SpawnProtection.dll
+        test -f ${{ env.OUTPUT_PATH }}/SpawnProtection.deps.json
+        test -f ${{ env.OUTPUT_PATH }}/PanoramaManager.dll
+        test -f ${{ env.OUTPUT_PATH }}/lang/en.json
+        find ${{ env.OUTPUT_PATH }} -type f | sort
     - name: Read Version
       id: get_version
       run: echo "::set-output name=version::$(cat VERSION)"

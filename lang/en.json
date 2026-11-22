@@ -8,5 +8,12 @@
 	"progressbar": "</font><font class='fontSize-l' color='{0}'>{1}</font>",
 	"progressbar.total_bars": "12",
 	"progressbar.empty_part":"▱",
-	"progressbar.filled_part": "▱"
+	"progressbar.filled_part": "▱",
+
+	"hud.protected.label": "Spawn protected",
+	"hud.protected.sub": "You can't be damaged",
+	"hud.ended.label": "Protection ended",
+	"hud.ended.sub": "You can be damaged now",
+	"hud.ended.fired": "You fired your weapon",
+	"hud.ended.moved": "You moved"
 }
