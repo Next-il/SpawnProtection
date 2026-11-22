@@ -17,13 +17,18 @@ namespace SpawnProtection;
 /// <para><b>Everything is drawn from state.</b> PanoramaManager rebuilds a player's panel by itself after
 /// every respawn, a round restart or a map change, and drops every per-viewer variable and class on the
 /// way (PanelAction.Restored). Each viewer's pill is a plain record here and <see cref="Restore"/> writes
-/// it back. Every timed step (the entry, the bar start, the end of the red line) is a time in that record,
-/// run by <see cref="Tick"/>, so nothing is left behind in a timer closure.</para>
+/// it back. Every timed step (the entry, the bar's next step, the end of the red line) is a time in that
+/// record, run by <see cref="Tick"/>, so nothing is left behind in a timer closure.</para>
 ///
 /// <para><b>Held, then draining.</b> The plugin starts its countdown only after freeze time, so a spawn
 /// shows the pill with a full, still bar (<see cref="Protect"/>) and the drain begins when the plugin's
-/// timer does (<see cref="Drain"/>). The bar is one CSS transition the client runs on its own; the server
-/// writes the seconds once a second and nothing per tick.</para>
+/// timer does (<see cref="Drain"/>).</para>
+///
+/// <para><b>The bar is a clip ladder with one fixed glide.</b> spawnprotect_hud.css carries s0..s50 (2% a
+/// step) on a clip with a 0.3s linear transition that no class changes, and <see cref="TickBar"/> names the
+/// step for where the protection will be one glide from now, every <see cref="BarEverySeconds"/>. It
+/// replaced one long transition (snap to at-N, then dur-N and "run" 0.35s later), which did not draw in
+/// game: nothing has shown a class-swapped transition-duration working there.</para>
 ///
 /// <para>This class only draws. Who is protected, and for how long, is the plugin's call.</para>
 /// </summary>
@@ -41,16 +46,21 @@ internal sealed class SpawnHud : IDisposable
     /// <summary>The exit transition, before the pill collapses.</summary>
     private const float ExitSeconds = 0.35f;
 
-    /// <summary>"run" off, wait, "run" on. A restart of the same class was measured to need 0.3s or more.</summary>
-    private const float BarStartSeconds = 0.35f;
-
     /// <summary>How long the red "Protection ended" line stays.</summary>
     private const float EndedSeconds = 1.5f;
 
-    private const int BarSteps = 20;
+    /// <summary>s0..s50 in spawnprotect_hud.css: 2% a step, s50 full.</summary>
+    private const int BarSteps = 50;
 
-    /// <summary>The dur-N classes spawnprotect_hud.css defines: every second to 60.</summary>
-    private const int MaxBarSeconds = 60;
+    /// <summary>
+    /// The .hn-bar transition-duration in spawnprotect_hud.css. Every step is aimed this far ahead of the
+    /// clock, so the fill arrives where the protection is instead of trailing it, and reaches s0 as it ends.
+    /// </summary>
+    private const float GlideSeconds = 0.3f;
+
+    /// <summary>How often the bar gets its next step. Under <see cref="GlideSeconds"/>, so the fill never
+    /// stops between steps; Tick runs every 0.1s.</summary>
+    private const float BarEverySeconds = 0.2f;
 
     private enum Kind { None, Protected, Ended }
 
@@ -85,15 +95,15 @@ internal sealed class SpawnHud : IDisposable
         // ended
         public string EndSub = "";
 
-        // bar: the classes on sp_bar as last written, so the next write can take them off again
-        public int BarAt = -1;
-        public int BarDur = -1;
-        public bool BarStarted;
-        public float BarRunAt = -1;
+        // bar: the s- step on sp_bar as last written (-1 = none), so the next write can take it off again
+        public int BarStep = -1;
 
-        /// <summary>The bar is known to sit full and still on the client, so a drain can start from it.</summary>
-        public bool BarFull;
-        public float BarResetAt = -1000;
+        /// <summary>When the bar may get its next step.</summary>
+        public float BarNextAt;
+
+        /// <summary>The next step is written even when it has not moved: after a rebuild the client may not
+        /// have it. On an entity that kept it, the write changes nothing.</summary>
+        public bool BarResend;
     }
 
     private readonly BasePlugin _plugin;
@@ -175,6 +185,8 @@ internal sealed class SpawnHud : IDisposable
         if (!_panel.IsOpenFor(player))
         {
             _panel.Open(player);
+            // Open takes off every per-viewer class this handle set for the slot, the bar step included
+            ViewerOf(player).BarStep = -1;
             Restore(player);
         }
 
@@ -200,16 +212,14 @@ internal sealed class SpawnHud : IDisposable
             viewer.ShowAt = -1;
             viewer.CollapseAt = -1;
             viewer.Draining = false;
-            viewer.BarStarted = false;
-            viewer.BarRunAt = -1;
-            viewer.BarFull = false;
-            viewer.BarResetAt = -1000;
+            viewer.BarNextAt = 0;
+            viewer.BarResend = true;
         }
     }
 
     /// <summary>
     /// Writes the pill back for one player, from state. Called on open and after the library rebuilt the
-    /// panel. Every class it may have lost is written again; the bar starts over from where it should be.
+    /// panel. Every class it may have lost is written again; the bar's step is sent again on the next draw.
     /// </summary>
     public void Restore(CCSPlayerController player)
     {
@@ -224,11 +234,10 @@ internal sealed class SpawnHud : IDisposable
 
         viewer.Shown = false;
         viewer.Number = -1;
-        viewer.BarStarted = false;
-        viewer.BarRunAt = -1;
-        // Not trusted after a rebuild: the bar takes the slow, explicit reset
-        viewer.BarFull = false;
-        viewer.BarResetAt = -1000;
+        // The step record is NOT reset: a kept entity still wears it, and the next write takes exactly that
+        // off. On a rebuilt one the removal is a no-op. The step itself is sent again either way.
+        viewer.BarNextAt = 0;
+        viewer.BarResend = true;
         Cls(player, PillId, "show", false);
 
         if (viewer.Kind == Kind.None)
@@ -263,12 +272,9 @@ internal sealed class SpawnHud : IDisposable
         viewer.HeldSeconds = Math.Max(seconds, 0.1f);
         viewer.Draining = false;
         viewer.Number = -1;
-        viewer.BarStarted = false;
-        viewer.BarRunAt = -1;
 
-        // A bar left draining or emptied by the last spawn goes back to full first
-        if (!viewer.BarFull)
-            BarSnapTo(player, viewer, 1f, now);
+        // A bar left draining or emptied by the last spawn glides back to full first
+        BarTo(player, viewer, 1f);
 
         Cls(player, PillId, "hidden", false);
         viewer.CollapseAt = -1;
@@ -293,15 +299,15 @@ internal sealed class SpawnHud : IDisposable
 
         var deadline = Server.CurrentTime + Math.Max(seconds, 0.1f);
 
-        // A countdown that moved by more than a moment (the plugin restarted it) gets a new bar
+        // The same countdown again: nothing changes. One the plugin restarted needs nothing more either: the
+        // bar's next step is computed from the new deadline, and the glide takes it there.
         if (viewer.Draining && Math.Abs(viewer.Deadline - deadline) <= 0.5f)
             return;
 
         viewer.Draining = true;
         viewer.Deadline = deadline;
         viewer.Total = Math.Max(Math.Max(total, seconds), 0.1f);
-        viewer.BarStarted = false;
-        viewer.BarRunAt = -1;
+        viewer.BarNextAt = 0;
     }
 
     /// <summary>
@@ -315,7 +321,6 @@ internal sealed class SpawnHud : IDisposable
 
         viewer.Kind = Kind.Ended;
         viewer.EndSub = sub;
-        viewer.BarRunAt = -1;
         viewer.Until = (viewer.ShowAt >= 0 ? viewer.ShowAt : Server.CurrentTime) + EndedSeconds;
 
         // In place, like the preview. A pill still waiting for its entry is written when it shows.
@@ -355,7 +360,6 @@ internal sealed class SpawnHud : IDisposable
         viewer.Kind = Kind.None;
         viewer.Draining = false;
         viewer.ShowAt = -1;
-        viewer.BarRunAt = -1;
 
         if (_panel == null || !_panel.IsOpenFor(player))
         {
@@ -402,8 +406,8 @@ internal sealed class SpawnHud : IDisposable
                 if (viewer.Kind == Kind.None)
                 {
                     Cls(player, PillId, "hidden", true);
-                    // Out of sight now, so the bar can go back to full for the next spawn
-                    BarSnapTo(player, viewer, 1f, now);
+                    // Out of sight now, so the bar can glide back to full for the next spawn
+                    BarTo(player, viewer, 1f);
                 }
             }
 
@@ -443,73 +447,52 @@ internal sealed class SpawnHud : IDisposable
             Set(player, "sp_n", number.ToString());
         }
 
+        // Held: the bar sits full and still. Draining: the next step.
         if (!viewer.Draining)
-        {
-            // Held: the bar must sit full and still. After a rebuild its state is unknown, so snap it.
-            if (!viewer.BarFull)
-                BarSnapTo(player, viewer, 1f, now);
-            return;
-        }
-
-        var remaining = viewer.Deadline - now;
-
-        // A protection longer than the longest dur-N class keeps a full bar until it fits
-        if (!viewer.BarStarted && remaining <= MaxBarSeconds + 0.5f)
-        {
-            viewer.BarStarted = true;
-            var fraction = remaining / viewer.Total;
-
-            if (viewer.BarFull && fraction >= 0.97f)
-            {
-                // A fresh drain on a bar that sits full: start as soon as the reset has had its time
-                viewer.BarRunAt = Math.Max(now, viewer.BarResetAt + BarStartSeconds);
-            }
-            else
-            {
-                // Picked up halfway, or the bar's state is not known: snap it, then drain after the wait
-                BarSnapTo(player, viewer, fraction, now);
-                viewer.BarRunAt = now + BarStartSeconds;
-            }
-        }
-
-        if (viewer.BarRunAt >= 0 && now >= viewer.BarRunAt)
-        {
-            viewer.BarRunAt = -1;
-            BarRun(player, viewer, viewer.Deadline - now);
-        }
+            BarTo(player, viewer, 1f);
+        else
+            TickBar(player, viewer, now);
     }
 
     // ------------------------------------------------------------------ the bar
 
     /// <summary>
-    /// Puts the bar at a fraction with no transition. The duration comes off before "run" so the reset
-    /// snaps; with a dur-N class still on, dropping "run" would animate the bar back to full over it.
+    /// The drain: every <see cref="BarEverySeconds"/>, the step for where the protection will be one glide
+    /// from now. The glide outlasts the gap between steps, so the fill never stops, and the last steps
+    /// before the deadline are already s0. A drain picked up halfway (a respawn redraw) needs nothing
+    /// special: its first step is where it should be, and the glide takes the fill there.
     /// </summary>
-    private void BarSnapTo(CCSPlayerController player, Viewer viewer, float fraction, float now)
+    private void TickBar(CCSPlayerController player, Viewer viewer, float now)
     {
-        if (viewer.BarDur >= 0)
-            Cls(player, BarId, $"dur-{viewer.BarDur}", false);
-        viewer.BarDur = -1;
-        Cls(player, BarId, "run", false);
+        if (now < viewer.BarNextAt && !viewer.BarResend)
+            return;
 
-        var at = Math.Clamp((int)Math.Round(fraction * BarSteps), 0, BarSteps);
-        if (viewer.BarAt >= 0 && viewer.BarAt != at)
-            Cls(player, BarId, $"at-{viewer.BarAt}", false);
-        Cls(player, BarId, $"at-{at}", true);
-        viewer.BarAt = at;
-
-        viewer.BarFull = at == BarSteps;
-        viewer.BarResetAt = now;
+        viewer.BarNextAt = now + BarEverySeconds;
+        BarTo(player, viewer, (viewer.Deadline - now - GlideSeconds) / viewer.Total);
     }
 
-    /// <summary>Starts the drain: one linear clip transition to 0 over the time that is left.</summary>
-    private void BarRun(CCSPlayerController player, Viewer viewer, float seconds)
+    /// <summary>
+    /// Turns on the s- step for <paramref name="fraction"/> (1 = full) and the previous one off. Only a change
+    /// is written, unless <see cref="Viewer.BarResend"/> asks for the step again. Both writes land in one
+    /// update, so the client never sees two steps on, which would paint whichever the stylesheet lists last.
+    /// </summary>
+    private void BarTo(CCSPlayerController player, Viewer viewer, float fraction)
     {
-        var dur = Math.Clamp((int)Math.Round(seconds), 1, MaxBarSeconds);
-        Cls(player, BarId, $"dur-{dur}", true);
-        viewer.BarDur = dur;
-        Cls(player, BarId, "run", true);
-        viewer.BarFull = false;
+        var step = Math.Clamp((int)Math.Round(fraction * BarSteps, MidpointRounding.AwayFromZero), 0, BarSteps);
+        var resend = viewer.BarResend;
+        viewer.BarResend = false;
+
+        if (viewer.BarStep == step)
+        {
+            if (resend)
+                Cls(player, BarId, $"s{step}", true);
+            return;
+        }
+
+        if (viewer.BarStep >= 0)
+            Cls(player, BarId, $"s{viewer.BarStep}", false);
+        Cls(player, BarId, $"s{step}", true);
+        viewer.BarStep = step;
     }
 
     // ------------------------------------------------------------------ drawing

@@ -29,9 +29,8 @@
 
 		CLASSES THE SERVER TOGGLES
 		  sp_pill   show hidden | st-live st-ended
-		  sp_bar    at-0..at-20     where the bar starts, in 5% steps (at-20 = full)
-		            dur-1..dur-60   how long it drains for, in seconds
-		            run             drain to 0, one linear clip transition
+		  sp_bar    s0..s50         where the bar is, 2% a step (s50 = full, also the default);
+		                            one fixed 0.3s glide, a new step every 0.2s
 	-->
 	<Panel class="hud-screen" hittest="false">
 		<Panel id="SpawnProtRoot" class="sp-root" hittest="false">
@@ -49,7 +48,7 @@
 					</Panel>
 				</Panel>
 				<Panel class="hn-track" hittest="false">
-					<Panel id="sp_bar" class="hn-bar at-20" hittest="false" />
+					<Panel id="sp_bar" class="hn-bar" hittest="false" />
 				</Panel>
 			</Panel>
 
