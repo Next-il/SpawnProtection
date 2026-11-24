@@ -17,7 +17,7 @@
 		<!-- The spawn protection pill (SpawnHud.cs). Copied next to the plugin by CopyPanoramaManager below:
 		     each CounterStrikeSharp plugin loads from its own folder, and the deps.json (no longer turned off)
 		     is what points the loader at it. Same version as our other HUD plugins. -->
-		<PackageReference Include="PanoramaManager" Version="0.4.3" />
+		<PackageReference Include="PanoramaManager" Version="0.4.5" />
 	</ItemGroup>
 	<ItemGroup>
 		<None Update="lang\**\*.*" CopyToOutputDirectory="PreserveNewest" />
